@@ -9,6 +9,7 @@ import subprocess
 import time
 import argparse
 import sys
+import os
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
@@ -16,7 +17,17 @@ from typing import Dict, List, Optional, Tuple
 class NetworkTester:
     def __init__(self, target_host: str, output_file: str = "network_test_results.txt"):
         self.target_host = target_host
-        self.output_file = output_file
+        # Ensure output directory exists
+        output_dir = "output"
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Add timestamp to filename
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename, ext = os.path.splitext(output_file)
+        timestamped_filename = f"{filename}_{timestamp}{ext}"
+        
+        # Set output file path to output folder with timestamp
+        self.output_file = os.path.join(output_dir, timestamped_filename)
         self.results = []
         
     def resolve_hostname(self) -> Optional[str]:
@@ -245,7 +256,7 @@ def main():
     parser = argparse.ArgumentParser(description='Network connectivity and latency tester')
     parser.add_argument('host', help='Target hostname or IP address')
     parser.add_argument('-o', '--output', default='network_test_results.txt',
-                       help='Output file for results (default: network_test_results.txt)')
+                       help='Output filename for results (saved to output/ folder, default: network_test_results.txt)')
     parser.add_argument('-p', '--ports', nargs='+', type=int, default=[80, 443],
                        help='TCP ports to test (default: 80 443)')
     parser.add_argument('-c', '--count', type=int, default=4,

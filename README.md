@@ -8,7 +8,7 @@ A Python program that tests network connectivity and latency to any host or IP a
 - **Ping Testing**: Tests ICMP connectivity with packet loss and latency statistics
 - **TCP Connection Testing**: Tests specific port connectivity with response times
 - **Cross-platform**: Works on Windows, Linux, and macOS
-- **Detailed Reporting**: Saves comprehensive results to text files
+- **Detailed Reporting**: Saves comprehensive results to timestamped text files in the output/ folder
 
 ## Usage
 
@@ -18,7 +18,7 @@ A Python program that tests network connectivity and latency to any host or IP a
 # Basic usage - test a website
 python network_tester.py google.com
 
-# Test with custom output file
+# Test with custom output filename (automatically timestamped, saved to output/ folder)
 python network_tester.py google.com -o my_test_results.txt
 
 # Test specific ports
@@ -27,7 +27,7 @@ python network_tester.py example.com -p 80 443 8080
 # Send more ping packets
 python network_tester.py 8.8.8.8 -c 10
 
-# Combine options
+# Combine options (results saved to output/github_test_YYYYMMDD_HHMMSS.txt)
 python network_tester.py github.com -o github_test.txt -p 22 80 443 -c 5
 ```
 
@@ -36,7 +36,7 @@ python network_tester.py github.com -o github_test.txt -p 22 80 443 -c 5
 ```python
 from network_tester import NetworkTester
 
-# Create tester instance
+# Create tester instance (results will be saved to output/results_YYYYMMDD_HHMMSS.txt)
 tester = NetworkTester("example.com", "results.txt")
 
 # Run comprehensive test
@@ -49,9 +49,16 @@ tester.save_results()
 ## Command Line Arguments
 
 - `host`: Target hostname or IP address (required)
-- `-o, --output`: Output file for results (default: network_test_results.txt)
+- `-o, --output`: Output filename for results (automatically timestamped and saved to output/ folder, default: network_test_results.txt)
 - `-p, --ports`: TCP ports to test (default: 80 443)
 - `-c, --count`: Number of ping packets to send (default: 4)
+
+## Output File Naming
+
+All output files are automatically timestamped to prevent overwrites and maintain a history of tests:
+- Format: `filename_YYYYMMDD_HHMMSS.ext`
+- Example: `network_test_results_20241015_143025.txt`
+- Files are saved in the `output/` directory
 
 ## Example Output
 

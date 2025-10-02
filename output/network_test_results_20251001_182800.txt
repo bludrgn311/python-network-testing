@@ -1,0 +1,38 @@
+============================================================
+NETWORK TEST RESULTS FOR GOOGLE.COM
+============================================================
+Test completed at: 2025-10-01 18:28:04
+
+Test 1: DNS Resolution
+----------------------------------------
+Timestamp: 2025-10-01 18:28:00
+Status: PASS
+Hostname: google.com
+Resolved IP: 192.178.49.174
+Response Time: 49.12ms
+
+Test 2: Ping Test
+----------------------------------------
+Timestamp: 2025-10-01 18:28:00
+Status: PASS
+Packets Sent: 4
+Packets Received: 4
+Packet Loss: 0.0%
+Min Latency: 24.0ms
+Max Latency: 26.0ms
+Avg Latency: 25.5ms
+
+Test 3: TCP Connection
+----------------------------------------
+Timestamp: 2025-10-01 18:28:03
+Status: PASS
+Port: 80
+Response Time: 26.13ms
+
+Test 4: TCP Connection
+----------------------------------------
+Timestamp: 2025-10-01 18:28:03
+Status: PASS
+Port: 443
+Response Time: 52.85ms
+
