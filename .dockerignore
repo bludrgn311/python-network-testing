@@ -1,0 +1,28 @@
+# Git files
+.git
+.gitignore
+
+# IDE files
+.vscode
+*.swp
+*.swo
+*~
+
+# Python cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+
+# Output files
+output/
+
+# Documentation
+README.md
+example_usage.py
+
+# OS files
+.DS_Store
+Thumbs.db
