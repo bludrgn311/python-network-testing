@@ -8,7 +8,7 @@ A Python program that tests network connectivity and latency to any host or IP a
 - **Ping Testing**: Tests ICMP connectivity with packet loss and latency statistics
 - **TCP Connection Testing**: Tests specific port connectivity with response times
 - **Cross-platform**: Works on Windows, Linux, and macOS
-- **Detailed Reporting**: Saves comprehensive results to timestamped text files in the output/ folder
+- **Detailed Reporting**: Saves comprehensive results to timestamped text files in the ```output/``` folder
 
 ## Usage
 
