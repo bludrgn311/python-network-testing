@@ -16,19 +16,38 @@ from typing import Dict, List, Optional, Tuple
 
 class NetworkTester:
     def __init__(self, target_host: str, output_file: str = "network_test_results.txt"):
-        self.target_host = target_host
+        # Validate and sanitize target host
+        self.target_host = self._sanitize_hostname(target_host)
+        
         # Ensure output directory exists
         output_dir = "output"
         os.makedirs(output_dir, exist_ok=True)
         
+        # Sanitize output filename to prevent path traversal
+        safe_filename = os.path.basename(output_file)
+        
         # Add timestamp to filename
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename, ext = os.path.splitext(output_file)
+        filename, ext = os.path.splitext(safe_filename)
         timestamped_filename = f"{filename}_{timestamp}{ext}"
         
         # Set output file path to output folder with timestamp
         self.output_file = os.path.join(output_dir, timestamped_filename)
         self.results = []
+    
+    def _sanitize_hostname(self, hostname: str) -> str:
+        """Sanitize hostname to prevent command injection."""
+        # Remove any characters that could be used for command injection
+        # Allow only alphanumeric, dots, hyphens, and underscores
+        import re
+        if not re.match(r'^[a-zA-Z0-9\.\-_]+$', hostname):
+            raise ValueError(f"Invalid hostname format: {hostname}")
+        
+        # Additional length check
+        if len(hostname) > 253:
+            raise ValueError("Hostname too long")
+        
+        return hostname
         
     def resolve_hostname(self) -> Optional[str]:
         """Resolve hostname to IP address."""
@@ -46,6 +65,7 @@ class NetworkTester:
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'success': False,
             'response_time': None,
+            'http_status_code': None,
             'error': None
         }
         
@@ -54,15 +74,44 @@ class NetworkTester:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sock.settimeout(timeout)
             
-            connection_result = sock.connect_ex((self.target_host, port))
-            end_time = time.time()
+            # Connect to the host
+            sock.connect((self.target_host, port))
             
-            if connection_result == 0:
-                result['success'] = True
-                result['response_time'] = round((end_time - start_time) * 1000, 2)  # ms
-            else:
-                result['error'] = f"Connection failed (error code: {connection_result})"
-                
+            # Try to get HTTP response code for HTTP/HTTPS ports
+            if port in [80, 443, 8080, 8443]:
+                try:
+                    # For HTTPS ports, wrap socket with SSL
+                    if port in [443, 8443]:
+                        import ssl
+                        context = ssl.create_default_context()
+                        # Set reasonable SSL options
+                        context.check_hostname = True
+                        context.verify_mode = ssl.CERT_REQUIRED
+                        sock = context.wrap_socket(sock, server_hostname=self.target_host)
+                    
+                    # Send a simple HTTP HEAD request
+                    http_request = f"HEAD / HTTP/1.1\r\nHost: {self.target_host}\r\nConnection: close\r\n\r\n"
+                    sock.sendall(http_request.encode())
+                    
+                    # Receive response with size limit
+                    response = sock.recv(1024).decode('utf-8', errors='ignore')
+                    
+                    # Parse status code from first line
+                    if response:
+                        first_line = response.split('\r\n')[0]
+                        if 'HTTP' in first_line:
+                            parts = first_line.split()
+                            if len(parts) >= 2:
+                                result['http_status_code'] = int(parts[1])
+                except (ssl.SSLError, ssl.CertificateError, ValueError, IndexError) as e:
+                    # If HTTP request fails, still mark TCP connection as successful
+                    # SSL errors are expected for self-signed certs
+                    pass
+            
+            end_time = time.time()
+            result['success'] = True
+            result['response_time'] = round((end_time - start_time) * 1000, 2)  # ms
+            
             sock.close()
             
         except Exception as e:
@@ -77,7 +126,9 @@ class NetworkTester:
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'packets_sent': count,
             'packets_received': 0,
-            'packet_loss': 0,
+            'packets_successful': 0,
+            'packets_failed': count,
+            'packet_loss': 100.0,
             'min_latency': None,
             'max_latency': None,
             'avg_latency': None,
@@ -93,42 +144,63 @@ class NetworkTester:
                 # Linux/Mac ping command
                 cmd = ['ping', '-c', str(count), self.target_host]
             
-            process = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            # Dynamic timeout: allow 2 seconds per ping plus 10 second buffer
+            timeout = (count * 2) + 10
+            process = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
             
-            if process.returncode == 0:
-                output = process.stdout
+            # Parse ping results regardless of return code
+            output = process.stdout if process.returncode == 0 else process.stdout + process.stderr
+            
+            # Parse ping results (basic parsing)
+            lines = output.split('\n')
+            latencies = []
+            
+            for line in lines:
+                if 'time=' in line or 'time<' in line:
+                    try:
+                        # Extract time value
+                        if 'time=' in line:
+                            time_part = line.split('time=')[1].split('ms')[0]
+                        else:  # time<
+                            time_part = line.split('time<')[1].split('ms')[0]
+                        latencies.append(float(time_part))
+                    except (IndexError, ValueError):
+                        continue
+            
+            # Calculate statistics
+            result['packets_received'] = len(latencies)
+            result['packets_successful'] = len(latencies)
+            result['packets_failed'] = count - len(latencies)
+            result['packet_loss'] = round(((count - len(latencies)) / count) * 100, 1)
+            
+            if latencies:
+                result['min_latency'] = round(min(latencies), 2)
+                result['max_latency'] = round(max(latencies), 2)
+                result['avg_latency'] = round(sum(latencies) / len(latencies), 2)
+            
+            # Determine success based on whether we got any responses
+            if result['packets_successful'] == count:
                 result['success'] = True
-                
-                # Parse ping results (basic parsing)
-                lines = output.split('\n')
-                latencies = []
-                
-                for line in lines:
-                    if 'time=' in line or 'time<' in line:
-                        try:
-                            # Extract time value
-                            if 'time=' in line:
-                                time_part = line.split('time=')[1].split('ms')[0]
-                            else:  # time<
-                                time_part = line.split('time<')[1].split('ms')[0]
-                            latencies.append(float(time_part))
-                        except (IndexError, ValueError):
-                            continue
-                
-                if latencies:
-                    result['packets_received'] = len(latencies)
-                    result['packet_loss'] = round(((count - len(latencies)) / count) * 100, 1)
-                    result['min_latency'] = round(min(latencies), 2)
-                    result['max_latency'] = round(max(latencies), 2)
-                    result['avg_latency'] = round(sum(latencies) / len(latencies), 2)
-                    
+                result['error'] = f"All {count} pings successful"
+            elif result['packets_successful'] > 0:
+                result['success'] = False
+                result['error'] = f"Partial failure: {result['packets_successful']} successful, {result['packets_failed']} failed"
             else:
-                result['error'] = f"Ping failed: {process.stderr.strip()}"
+                result['success'] = False
+                result['error'] = f"All {count} pings failed"
+                if process.returncode != 0 and process.stderr.strip():
+                    result['error'] += f" - {process.stderr.strip()}"
                 
         except subprocess.TimeoutExpired:
-            result['error'] = "Ping test timed out"
+            result['packets_successful'] = 0
+            result['packets_failed'] = count
+            result['packet_loss'] = 100.0
+            result['error'] = f"Ping test timed out - All {count} pings failed"
         except Exception as e:
-            result['error'] = str(e)
+            result['packets_successful'] = 0
+            result['packets_failed'] = count
+            result['packet_loss'] = 100.0
+            result['error'] = f"Ping test error: {str(e)} - All {count} pings failed"
             
         return result
     
@@ -183,11 +255,18 @@ class NetworkTester:
         ping_result = self.ping_test(ping_count)
         self.results.append(ping_result)
         
-        if ping_result['success']:
-            print(f"Ping successful - Avg latency: {ping_result['avg_latency']}ms, "
-                  f"Packet loss: {ping_result['packet_loss']}%")
-        else:
-            print(f"Ping failed: {ping_result['error']}")
+        # Always show ping statistics
+        print(f"Ping results - Successful: {ping_result['packets_successful']}, "
+              f"Failed: {ping_result['packets_failed']}, "
+              f"Packet loss: {ping_result['packet_loss']}%")
+        
+        if ping_result['avg_latency']:
+            print(f"Latency - Avg: {ping_result['avg_latency']}ms, "
+                  f"Min: {ping_result['min_latency']}ms, "
+                  f"Max: {ping_result['max_latency']}ms")
+        
+        if ping_result['error']:
+            print(f"Status: {ping_result['error']}")
         
         # TCP Connection Tests
         for port in tcp_ports:
@@ -196,8 +275,10 @@ class NetworkTester:
             self.results.append(tcp_result)
             
             if tcp_result['success']:
-                print(f"TCP connection to port {port} successful - "
-                      f"Response time: {tcp_result['response_time']}ms")
+                status_msg = f"TCP connection to port {port} successful - Response time: {tcp_result['response_time']}ms"
+                if tcp_result['http_status_code']:
+                    status_msg += f", HTTP Status: {tcp_result['http_status_code']}"
+                print(status_msg)
             else:
                 print(f"TCP connection to port {port} failed: {tcp_result['error']}")
         
@@ -206,7 +287,7 @@ class NetworkTester:
     def save_results(self) -> None:
         """Save test results to output file."""
         try:
-            with open(self.output_file, 'w') as f:
+            with open(self.output_file, 'w', encoding='utf-8') as f:
                 f.write("=" * 60 + "\n")
                 f.write(f"NETWORK TEST RESULTS FOR {self.target_host.upper()}\n")
                 f.write("=" * 60 + "\n")
@@ -241,6 +322,8 @@ class NetworkTester:
                         f.write(f"Port: {result['port']}\n")
                         if result['success']:
                             f.write(f"Response Time: {result['response_time']}ms\n")
+                            if result['http_status_code']:
+                                f.write(f"HTTP Status Code: {result['http_status_code']}\n")
                         else:
                             f.write(f"Error: {result['error']}\n")
                     
@@ -264,10 +347,25 @@ def main():
     
     args = parser.parse_args()
     
-    # Create and run network tester
-    tester = NetworkTester(args.host, args.output)
-    tester.run_full_test(tcp_ports=args.ports, ping_count=args.count)
-    tester.save_results()
+    # Validate inputs
+    if args.count < 1 or args.count > 1000:
+        parser.error("Ping count must be between 1 and 1000")
+    
+    for port in args.ports:
+        if port < 1 or port > 65535:
+            parser.error(f"Invalid port number: {port}. Must be between 1 and 65535")
+    
+    try:
+        # Create and run network tester
+        tester = NetworkTester(args.host, args.output)
+        tester.run_full_test(tcp_ports=args.ports, ping_count=args.count)
+        tester.save_results()
+    except ValueError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Unexpected error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
