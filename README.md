@@ -178,3 +178,15 @@ For HTTPS connections, the tool verifies SSL certificates. Self-signed certifica
 ### DNS Resolution Failures
 
 DNS errors are captured and reported in both console and file output with detailed error messages.
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 - see the [LICENSE](LICENSE) file for details.
+
+### What this means:
+- You are free to use, modify, and distribute this software
+- If you distribute modified versions, you must also make the source code available under GPL-3.0
+- Any derivative work must also be licensed under GPL-3.0
+- There is no warranty for this software
+
+For more information about GPL-3.0, visit: https://www.gnu.org/licenses/gpl-3.0.en.html
