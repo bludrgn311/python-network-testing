@@ -25,7 +25,7 @@ RUN dnf update -y && \
 
 # Create non-root user for running the application
 RUN groupadd -r nettest && \
-    useradd -r -g nettest -u 1000 -m -s /bin/bash nettest
+    useradd -r -g nettest -u 202 -m -s /bin/bash nettest
 
 # Create app directory and set ownership
 WORKDIR /app
