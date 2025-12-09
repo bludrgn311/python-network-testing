@@ -13,7 +13,8 @@ A Python program that tests network connectivity and latency to any host or IP a
 - **TCP Connection Testing**: Tests specific port connectivity with:
   - Response times
   - HTTP/HTTPS status code detection (ports 80, 443, 8080, 8443)
-  - SSL/TLS support for HTTPS connections
+  - SSL/TLS support for HTTPS connections (TLS 1.2+ required)
+  - TLS version detection and reporting
 - **Security Hardened**: Input validation to prevent command injection and path traversal attacks
 - **Cross-platform**: Works on Windows, Linux, and macOS
 - **Detailed Reporting**: Saves comprehensive results to timestamped text files in the `output/` folder
@@ -106,23 +107,38 @@ Timestamp: 2024-01-15 14:30:23
 Status: PASS
 Port: 443
 Response Time: 45.67ms
+TLS Version: TLSv1.3
 HTTP Status Code: 200
 ```
 
 ### Console Output
 
-The tool also provides real-time console output:
+The tool provides real-time console output with clear visual separators:
 
 ```
+============================================================
 Starting network tests for google.com...
-Testing DNS resolution...
+============================================================
+
+[DNS Resolution Test]
+----------------------------------------
 DNS resolved to: 142.250.191.14
+
+[Ping Test]
+----------------------------------------
 Running ping test (4 packets)...
 Ping results - Successful: 4, Failed: 0, Packet loss: 0.0%
 Latency - Avg: 14.8ms, Min: 12.1ms, Max: 18.7ms
 Status: All 4 pings successful
+
+[TCP Connection Tests]
+----------------------------------------
+Testing TCP connection on port 80...
+TCP connection to port 80 successful - Response time: 32.45ms, HTTP Status: 301
 Testing TCP connection on port 443...
-TCP connection to port 443 successful - Response time: 45.67ms, HTTP Status: 200
+TCP connection to port 443 successful - Response time: 45.67ms, TLS: TLSv1.3, HTTP Status: 200
+
+============================================================
 Results saved to: output/network_test_results_20241015_143025.txt
 ```
 
@@ -171,9 +187,14 @@ docker run --rm -v $(pwd)/results:/app/output network-tester:latest google.com
 
 If you experience timeouts with large ping counts, the tool automatically adjusts the timeout based on the number of pings (2 seconds per ping + 10 second buffer).
 
-### SSL Certificate Errors
+### SSL/TLS Requirements
 
-For HTTPS connections, the tool verifies SSL certificates. Self-signed certificates will cause the HTTP status code to be unavailable, but the TCP connection test will still succeed.
+For HTTPS connections (ports 443, 8443):
+- **TLS 1.2 or higher is required** for security
+- SSL certificates are verified by default
+- Self-signed certificates will cause the HTTP status code to be unavailable, but the TCP connection test will still succeed
+- Servers that only support TLS 1.0 or 1.1 will show an error message indicating TLS 1.2+ is required
+- The TLS version used is displayed in both console and file output
 
 ### DNS Resolution Failures
 

@@ -58,7 +58,7 @@ class NetworkTester:
             return None
     
     def test_tcp_connection(self, port: int = 80, timeout: int = 5) -> Dict:
-        """Test TCP connection to target host."""
+        """Test TCP connection to target host with TLS 1.2+ requirement for HTTPS."""
         result = {
             'test_type': 'TCP Connection',
             'port': port,
@@ -66,6 +66,7 @@ class NetworkTester:
             'success': False,
             'response_time': None,
             'http_status_code': None,
+            'tls_version': None,
             'error': None
         }
         
@@ -83,11 +84,19 @@ class NetworkTester:
                     # For HTTPS ports, wrap socket with SSL
                     if port in [443, 8443]:
                         import ssl
-                        context = ssl.create_default_context()
-                        # Set reasonable SSL options
+                        # Create SSL context with TLS 1.2 minimum requirement
+                        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                        context.minimum_version = ssl.TLSVersion.TLSv1_2
+                        context.maximum_version = ssl.TLSVersion.MAXIMUM_SUPPORTED
+                        # Enable hostname checking and certificate verification
                         context.check_hostname = True
                         context.verify_mode = ssl.CERT_REQUIRED
+                        # Load default CA certificates
+                        context.load_default_certs()
                         sock = context.wrap_socket(sock, server_hostname=self.target_host)
+                        
+                        # Capture TLS version used
+                        result['tls_version'] = sock.version()
                     
                     # Send a simple HTTP HEAD request
                     http_request = f"HEAD / HTTP/1.1\r\nHost: {self.target_host}\r\nConnection: close\r\n\r\n"
@@ -105,7 +114,13 @@ class NetworkTester:
                                 result['http_status_code'] = int(parts[1])
                 except (ssl.SSLError, ssl.CertificateError, ValueError, IndexError) as e:
                     # If HTTP request fails, still mark TCP connection as successful
-                    # SSL errors are expected for self-signed certs
+                    # Note: SSL errors may occur for:
+                    # - Self-signed certificates
+                    # - Servers not supporting TLS 1.2 or higher
+                    # - Certificate verification failures
+                    if isinstance(e, ssl.SSLError) and 'UNSUPPORTED_PROTOCOL' in str(e):
+                        result['http_status_code'] = None
+                        result['error'] = 'TLS 1.2+ required but not supported by server'
                     pass
             
             end_time = time.time()
@@ -237,10 +252,13 @@ class NetworkTester:
         if tcp_ports is None:
             tcp_ports = [80, 443]  # Default HTTP and HTTPS ports
             
+        print("=" * 60)
         print(f"Starting network tests for {self.target_host}...")
+        print("=" * 60)
         
         # DNS Resolution Test
-        print("Testing DNS resolution...")
+        print("\n[DNS Resolution Test]")
+        print("-" * 40)
         dns_result = self.test_dns_resolution()
         self.results.append(dns_result)
         
@@ -251,6 +269,8 @@ class NetworkTester:
         print(f"DNS resolved to: {dns_result['resolved_ip']}")
         
         # Ping Test
+        print("\n[Ping Test]")
+        print("-" * 40)
         print(f"Running ping test ({ping_count} packets)...")
         ping_result = self.ping_test(ping_count)
         self.results.append(ping_result)
@@ -269,6 +289,8 @@ class NetworkTester:
             print(f"Status: {ping_result['error']}")
         
         # TCP Connection Tests
+        print("\n[TCP Connection Tests]")
+        print("-" * 40)
         for port in tcp_ports:
             print(f"Testing TCP connection on port {port}...")
             tcp_result = self.test_tcp_connection(port)
@@ -276,12 +298,15 @@ class NetworkTester:
             
             if tcp_result['success']:
                 status_msg = f"TCP connection to port {port} successful - Response time: {tcp_result['response_time']}ms"
+                if tcp_result['tls_version']:
+                    status_msg += f", TLS: {tcp_result['tls_version']}"
                 if tcp_result['http_status_code']:
                     status_msg += f", HTTP Status: {tcp_result['http_status_code']}"
                 print(status_msg)
             else:
                 print(f"TCP connection to port {port} failed: {tcp_result['error']}")
         
+        print("\n" + "=" * 60)
         return self.results
     
     def save_results(self) -> None:
@@ -322,6 +347,8 @@ class NetworkTester:
                         f.write(f"Port: {result['port']}\n")
                         if result['success']:
                             f.write(f"Response Time: {result['response_time']}ms\n")
+                            if result['tls_version']:
+                                f.write(f"TLS Version: {result['tls_version']}\n")
                             if result['http_status_code']:
                                 f.write(f"HTTP Status Code: {result['http_status_code']}\n")
                         else:
