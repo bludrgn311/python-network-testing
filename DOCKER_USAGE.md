@@ -85,18 +85,51 @@ curl -I https://google.com
 nc -zv google.com 443
 ```
 
+## Security
+
+### Non-Root Execution
+
+The container runs as a non-root user (`nettest`, UID 1000) for enhanced security. The ping utility has been granted the `CAP_NET_RAW` capability, allowing it to function without root privileges.
+
+**Security Benefits:**
+- Reduced attack surface
+- Follows principle of least privilege
+- Prevents container breakout escalation
+- Safe for multi-tenant environments
+
+**What Works:**
+- ✅ DNS resolution
+- ✅ TCP connections
+- ✅ HTTP/HTTPS requests
+- ✅ Ping (via capability grant)
+- ✅ Basic network tools (dig, nslookup, nc, telnet, wget)
+
+**Limitations:**
+- ⚠️ Some advanced tools (tcpdump, traceroute) require additional capabilities
+- ⚠️ To use privileged tools, run with `--cap-add=NET_ADMIN --cap-add=NET_RAW`
+
+### Running with Additional Capabilities
+
+If you need to use tools like tcpdump or traceroute:
+
+```bash
+docker run --rm --cap-add=NET_ADMIN --cap-add=NET_RAW network-tester:latest google.com
+```
+
+**Note:** Only add capabilities when necessary. The default configuration is sufficient for the network_tester.py script.
+
 ## Included Network Tools
 
 The container includes the following network utilities:
-- `ping` - ICMP echo requests
-- `traceroute` - Trace network path
-- `nslookup` / `dig` - DNS lookup tools
-- `netstat` - Network statistics
-- `ip` - IP configuration
-- `tcpdump` - Packet analyzer
-- `nc` (ncat) - Network connections
-- `telnet` - Telnet client
-- `wget` / `curl` - HTTP clients
+- `ping` - ICMP echo requests (works as non-root via capability)
+- `traceroute` - Trace network path (requires NET_ADMIN capability)
+- `nslookup` / `dig` - DNS lookup tools (works as non-root)
+- `netstat` - Network statistics (works as non-root)
+- `ip` - IP configuration (works as non-root)
+- `tcpdump` - Packet analyzer (requires NET_ADMIN capability)
+- `nc` (ncat) - Network connections (works as non-root)
+- `telnet` - Telnet client (works as non-root)
+- `wget` / `curl` - HTTP clients (works as non-root)
 
 ## Examples
 

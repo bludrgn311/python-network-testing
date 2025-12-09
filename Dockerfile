@@ -23,20 +23,30 @@ RUN dnf update -y && \
     nano \
     && dnf clean all
 
-# Create app directory
+# Create non-root user for running the application
+RUN groupadd -r nettest && \
+    useradd -r -g nettest -u 1000 -m -s /bin/bash nettest
+
+# Create app directory and set ownership
 WORKDIR /app
 
 # Copy the network tester script
 COPY network_tester.py /app/
 
-# Make the script executable
-RUN chmod +x /app/network_tester.py
+# Create output directory and set permissions
+RUN mkdir -p /app/output && \
+    chown -R nettest:nettest /app && \
+    chmod +x /app/network_tester.py
 
-# Create output directory
-RUN mkdir -p /app/output
+# Grant ping capability to the ping binary (allows non-root ping)
+# This is more secure than running the entire container as root
+RUN setcap cap_net_raw+ep /usr/bin/ping
 
 # Set Python to run in unbuffered mode for better logging
 ENV PYTHONUNBUFFERED=1
+
+# Switch to non-root user
+USER nettest
 
 # Set the entrypoint to the network tester
 ENTRYPOINT ["python3", "/app/network_tester.py"]
